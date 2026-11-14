@@ -63,6 +63,13 @@ _OUTFILE_::
   Use at most the specified duration of CPU time to compute the derived key.
   Default is 300 seconds.
 
+*-L*, *--max-length* _BYTE_::
+
+  Read at most the specified number of bytes from the encrypted file. _BYTE_
+  can also be provided as bytes with the unit symbol (such as KiB and MiB).
+  _BYTE_ should not be less than 128 bytes, which is the minimum length of an
+  scrypt-encrypted block.
+
 *--passphrase-from-tty*::
 
   Read the passphrase from `/dev/tty`. This is the default behavior.

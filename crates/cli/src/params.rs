@@ -10,7 +10,7 @@ use std::{
 use anyhow::Context;
 use byte_unit::UnitType;
 use fraction::{Fraction, GenericFraction, ToPrimitive};
-use scryptenc::scrypt;
+use scryptenc::{ResourceLimit, scrypt};
 #[cfg(feature = "json")]
 use serde::Serialize;
 use sysinfo::System;
@@ -44,6 +44,29 @@ pub enum Error {
 /// Gets the encryption parameters.
 pub fn get(data: &[u8]) -> anyhow::Result<scryptenc::Params> {
     scryptenc::Params::new(data).context("data is not a valid scrypt encrypted file")
+}
+
+/// Creates the resource policy shared by parameter extraction and
+/// decryption.
+pub fn resource_limit(
+    max_memory: Option<Byte>,
+    max_memory_fraction: Rate,
+    max_time: Time,
+    max_length: Option<crate::cli::Length>,
+) -> ResourceLimit {
+    let max_memory = get_memory_to_use(max_memory, max_memory_fraction);
+    let max_ops = (U128Fraction::from(*OPERATIONS_PER_SECOND)
+        * U128Fraction::from_fraction(Fraction::from(max_time.as_secs_f64())))
+    .floor()
+    .to_u128()
+    .unwrap_or(u128::MAX);
+    let mut limit = ResourceLimit::new()
+        .with_max_memory(u128::from(max_memory))
+        .with_max_ops(max_ops);
+    if let Some(max_length) = max_length {
+        limit = limit.with_max_ciphertext_size(u128::from(max_length.as_u64()));
+    }
+    limit
 }
 
 /// Prints the encryption parameters.
@@ -240,5 +263,43 @@ impl Params {
             r: params.r(),
             p: params.p(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::cli::{Byte, Length, Rate, Time};
+
+    #[test]
+    fn resource_limit_uses_the_configured_budgets() {
+        let limit = resource_limit(
+            Some(Byte::from_str("64MiB").unwrap()),
+            Rate::from_str("0.5").unwrap(),
+            Time::from_str("10s").unwrap(),
+            Some(Length::from_str("1024").unwrap()),
+        );
+        assert_eq!(limit.max_memory(), Some(64 * 1024 * 1024));
+        assert!(
+            limit
+                .max_ops()
+                .is_some_and(|ops| ops <= u128::from(*OPERATIONS_PER_SECOND) * 10)
+        );
+        assert_eq!(limit.max_ciphertext_size(), Some(1024));
+    }
+
+    #[test]
+    fn resource_limit_without_an_explicit_length() {
+        let limit = resource_limit(
+            None,
+            Rate::from_str("0.5").unwrap(),
+            Time::from_str("300s").unwrap(),
+            None,
+        );
+        assert!(limit.max_memory().is_some());
+        assert!(limit.max_ops().is_some());
+        assert_eq!(limit.max_ciphertext_size(), None);
     }
 }

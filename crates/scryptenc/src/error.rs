@@ -35,6 +35,17 @@ pub enum Error {
     /// The MAC (authentication tag) of the scrypt encrypted data format was
     /// invalid.
     InvalidMac(MacError),
+
+    /// The scrypt KDF required more memory than allowed by the configured
+    /// resource limit.
+    MemoryLimitExceeded,
+
+    /// The scrypt KDF required more CPU time (Salsa20/8 operations) than
+    /// allowed by the configured resource limit.
+    OperationLimitExceeded,
+
+    /// The encrypted blob was larger than the configured resource limit.
+    CiphertextTooLarge,
 }
 
 impl fmt::Display for Error {
@@ -47,6 +58,15 @@ impl fmt::Display for Error {
             Self::InvalidChecksum => write!(f, "checksum mismatch"),
             Self::InvalidHeaderMac(_) => write!(f, "invalid header MAC"),
             Self::InvalidMac(_) => write!(f, "invalid MAC"),
+            Self::MemoryLimitExceeded => {
+                write!(f, "decrypting the data takes too much memory")
+            }
+            Self::OperationLimitExceeded => {
+                write!(f, "decrypting the data takes too much CPU time")
+            }
+            Self::CiphertextTooLarge => {
+                write!(f, "the encrypted data is larger than the limit")
+            }
         }
     }
 }
@@ -127,6 +147,15 @@ mod tests {
             Error::InvalidMac(MacError).clone(),
             Error::InvalidMac(MacError)
         );
+        assert_eq!(
+            Error::MemoryLimitExceeded.clone(),
+            Error::MemoryLimitExceeded
+        );
+        assert_eq!(
+            Error::OperationLimitExceeded.clone(),
+            Error::OperationLimitExceeded
+        );
+        assert_eq!(Error::CiphertextTooLarge.clone(), Error::CiphertextTooLarge);
     }
 
     #[test]
@@ -172,6 +201,24 @@ mod tests {
             let b = a;
             assert_eq!(a, b);
         }
+
+        {
+            let a = Error::MemoryLimitExceeded;
+            let b = a;
+            assert_eq!(a, b);
+        }
+
+        {
+            let a = Error::OperationLimitExceeded;
+            let b = a;
+            assert_eq!(a, b);
+        }
+
+        {
+            let a = Error::CiphertextTooLarge;
+            let b = a;
+            assert_eq!(a, b);
+        }
     }
 
     #[cfg(feature = "alloc")]
@@ -199,8 +246,21 @@ mod tests {
             format!("{:?}", Error::InvalidMac(MacError)),
             "InvalidMac(MacError)"
         );
+        assert_eq!(
+            format!("{:?}", Error::MemoryLimitExceeded),
+            "MemoryLimitExceeded"
+        );
+        assert_eq!(
+            format!("{:?}", Error::OperationLimitExceeded),
+            "OperationLimitExceeded"
+        );
+        assert_eq!(
+            format!("{:?}", Error::CiphertextTooLarge),
+            "CiphertextTooLarge"
+        );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn equality() {
         assert_eq!(Error::InvalidLength, Error::InvalidLength);
@@ -297,6 +357,15 @@ mod tests {
             Error::InvalidHeaderMac(MacError)
         );
         assert_eq!(Error::InvalidMac(MacError), Error::InvalidMac(MacError));
+        assert_ne!(Error::InvalidMac(MacError), Error::MemoryLimitExceeded);
+        assert_ne!(Error::InvalidMac(MacError), Error::OperationLimitExceeded);
+        assert_ne!(Error::InvalidMac(MacError), Error::CiphertextTooLarge);
+        assert_eq!(Error::MemoryLimitExceeded, Error::MemoryLimitExceeded);
+        assert_ne!(Error::MemoryLimitExceeded, Error::OperationLimitExceeded);
+        assert_ne!(Error::MemoryLimitExceeded, Error::CiphertextTooLarge);
+        assert_eq!(Error::OperationLimitExceeded, Error::OperationLimitExceeded);
+        assert_ne!(Error::OperationLimitExceeded, Error::CiphertextTooLarge);
+        assert_eq!(Error::CiphertextTooLarge, Error::CiphertextTooLarge);
     }
 
     #[cfg(feature = "alloc")]
@@ -324,6 +393,18 @@ mod tests {
             "invalid header MAC"
         );
         assert_eq!(format!("{}", Error::InvalidMac(MacError)), "invalid MAC");
+        assert_eq!(
+            format!("{}", Error::MemoryLimitExceeded),
+            "decrypting the data takes too much memory"
+        );
+        assert_eq!(
+            format!("{}", Error::OperationLimitExceeded),
+            "decrypting the data takes too much CPU time"
+        );
+        assert_eq!(
+            format!("{}", Error::CiphertextTooLarge),
+            "the encrypted data is larger than the limit"
+        );
     }
 
     #[cfg(feature = "std")]
@@ -351,6 +432,9 @@ mod tests {
                 .unwrap()
                 .is::<MacError>()
         );
+        assert!(Error::MemoryLimitExceeded.source().is_none());
+        assert!(Error::OperationLimitExceeded.source().is_none());
+        assert!(Error::CiphertextTooLarge.source().is_none());
     }
 
     #[test]

@@ -45,5 +45,9 @@
 
   Decrypting files takes too much resources.
 
+*16*::
+
+  The encrypted data is larger than the limit.
+
 Exit statuses other than these are defined by
 {sysexits-man-page-url}[`<sysexits.h>`].

@@ -98,6 +98,7 @@ mod encrypt;
 mod error;
 mod format;
 mod params;
+mod resource;
 
 use aes::Aes256;
 use ctr::Ctr128BE;
@@ -115,10 +116,11 @@ pub use crate::{
     error::{Error, Result},
     format::{HEADER_SIZE, TAG_SIZE},
     params::Params,
+    resource::ResourceLimit,
 };
 #[cfg(feature = "alloc")]
 pub use crate::{
-    decrypt::decrypt,
+    decrypt::{decrypt, decrypt_with_limit},
     encrypt::{encrypt, encrypt_with_params},
 };
 

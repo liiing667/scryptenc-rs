@@ -7,7 +7,7 @@
 #[cfg(feature = "serde")]
 use serde::Serialize;
 
-use crate::{Result, format::Header};
+use crate::{ResourceLimit, Result, format::Header};
 
 /// The scrypt parameters used for the encrypted data.
 #[derive(Clone, Copy, Debug)]
@@ -46,6 +46,45 @@ impl Params {
             Ok(params)
         };
         inner(ciphertext.as_ref())
+    }
+
+    /// Creates a new instance of the scrypt parameters from `ciphertext`,
+    /// rejecting it if it does not comply with the resource `limit`.
+    ///
+    /// The length of `ciphertext` and the `N`/`r`/`p` parameters stored in its
+    /// header are checked against `limit` before any expensive operation is
+    /// performed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] if any of the following are true:
+    ///
+    /// - `ciphertext` is shorter than 128 bytes.
+    /// - The magic number is invalid.
+    /// - The version number is the unrecognized scrypt version number.
+    /// - The scrypt parameters are invalid.
+    /// - The length of `ciphertext` exceeds the limit.
+    /// - The memory required by the scrypt parameters exceeds the limit.
+    /// - The CPU time required by the scrypt parameters exceeds the limit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use scryptenc::{Params, ResourceLimit};
+    ///
+    /// let ciphertext = include_bytes!("../tests/data/data.txt.scrypt");
+    ///
+    /// let limit = ResourceLimit::new().with_max_ciphertext_size(1024);
+    /// assert!(Params::with_limit(ciphertext, limit).is_ok());
+    /// ```
+    pub fn with_limit(ciphertext: impl AsRef<[u8]>, limit: ResourceLimit) -> Result<Self> {
+        let inner = |ciphertext: &[u8], limit: ResourceLimit| -> Result<Self> {
+            limit.check_ciphertext_size(ciphertext.len())?;
+            let params = Header::parse(ciphertext).map(|h| h.params())?;
+            limit.check_params(params)?;
+            Ok(params)
+        };
+        inner(ciphertext.as_ref(), limit)
     }
 
     /// Gets log<sub>2</sub> of the scrypt parameter `N`.

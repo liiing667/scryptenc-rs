@@ -220,6 +220,10 @@ pub struct Decrypt {
     )]
     pub max_time: Time,
 
+    /// Read at most the specified number of bytes from the encrypted file.
+    #[arg(short('L'), long, value_name("BYTE"), group("resources"))]
+    pub max_length: Option<Length>,
+
     /// Read the passphrase from /dev/tty.
     ///
     /// This is the default behavior.
@@ -372,6 +376,34 @@ impl FromStr for Byte {
     }
 }
 
+/// Maximum length of the encrypted data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Length(byte_unit::Byte);
+
+impl Deref for Length {
+    type Target = byte_unit::Byte;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FromStr for Length {
+    type Err = anyhow::Error;
+
+    fn from_str(bytes: &str) -> anyhow::Result<Self> {
+        match byte_unit::Byte::from_str(bytes) {
+            Ok(b) if b.as_u64() < 128 => Err(anyhow!(
+                "length of the encrypted data is less than 128 bytes"
+            )),
+            Err(err) => Err(anyhow!(
+                "length of the encrypted data is not a valid value: {err}"
+            )),
+            Ok(b) => Ok(Self(b)),
+        }
+    }
+}
+
 /// Fraction of the available RAM.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Rate(Fraction);
@@ -516,6 +548,42 @@ mod tests {
     fn from_str_byte_if_out_of_range() {
         assert!(Byte::from_str("1023.99 KiB").is_err());
         assert!(Byte::from_str("16.01 EiB").is_err());
+    }
+
+    #[test]
+    fn deref_length() {
+        assert_eq!(
+            *Length(byte_unit::Byte::MEBIBYTE),
+            byte_unit::Byte::MEBIBYTE
+        );
+    }
+
+    #[test]
+    fn from_str_length() {
+        assert_eq!(Length::from_str("128").unwrap(), Length(128u64.into()));
+        assert_eq!(
+            Length::from_str("1 KiB").unwrap(),
+            Length(byte_unit::Byte::KIBIBYTE)
+        );
+        assert_eq!(
+            Length::from_str("1MiB").unwrap(),
+            Length(byte_unit::Byte::MEBIBYTE)
+        );
+    }
+
+    #[test]
+    fn from_str_length_if_too_small() {
+        assert!(Length::from_str("127").is_err());
+    }
+
+    #[test]
+    fn from_str_length_with_invalid_unit() {
+        assert!(
+            Length::from_str("BYTE")
+                .unwrap_err()
+                .to_string()
+                .contains("the character 'B' is not a number")
+        );
     }
 
     #[test]

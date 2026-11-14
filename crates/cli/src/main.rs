@@ -47,6 +47,9 @@ enum ExitCode {
     /// Decrypting files takes too much resources.
     LackOfResources,
 
+    /// The encrypted data is larger than the limit.
+    CiphertextTooLarge,
+
     /// Error defined by `<sysexits.h>`.
     Other(sysexits::ExitCode),
 }
@@ -69,6 +72,7 @@ impl Termination for ExitCode {
             Self::InvalidPassphrase => 11.into(),
             Self::InvalidParams => 14.into(),
             Self::LackOfResources => 15.into(),
+            Self::CiphertextTooLarge => 16.into(),
             Self::Other(code) => code.into(),
         }
     }
@@ -91,6 +95,9 @@ fn main() -> ExitCode {
                     ScryptencError::UnknownVersion(_) => ExitCode::UnknownVersion,
                     ScryptencError::InvalidParams(_) => ExitCode::InvalidParams,
                     ScryptencError::InvalidHeaderMac(_) => ExitCode::InvalidPassphrase,
+                    ScryptencError::MemoryLimitExceeded => ExitCode::LackOfMemory,
+                    ScryptencError::OperationLimitExceeded => ExitCode::LackOfCpuTime,
+                    ScryptencError::CiphertextTooLarge => ExitCode::CiphertextTooLarge,
                 };
             }
             if let Some(e) = err.downcast_ref::<params::Error>() {

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::{Context, bail};
 use clap::Parser;
-use scryptenc::{Decryptor, Error as ScryptencError, scrypt};
+use scryptenc::{Decryptor, Error as ScryptencError, ResourceLimit, scrypt};
 
 use crate::{
     cli::{Command, Opt},
@@ -122,20 +122,29 @@ pub fn run() -> anyhow::Result<()> {
                 }
             }
 
-            if !arg.force {
-                params::check(
+            let limit = if arg.force {
+                ResourceLimit::new()
+            } else {
+                params::resource_limit(
                     arg.max_memory,
                     arg.max_memory_fraction,
                     arg.max_time,
-                    params.log_n(),
-                    params.r(),
-                    params.p(),
-                )?;
-            }
+                    arg.max_length,
+                )
+            };
 
-            let cipher = match Decryptor::new(&input, passphrase) {
+            let cipher = match Decryptor::with_limit(&input, passphrase, limit) {
                 c @ Err(ScryptencError::InvalidHeaderMac(_)) => {
                     c.context("passphrase is incorrect")
+                }
+                c @ Err(ScryptencError::CiphertextTooLarge) => {
+                    c.context("the encrypted data exceeds the configured length limit")
+                }
+                c @ Err(ScryptencError::MemoryLimitExceeded) => {
+                    c.context("the encrypted data exceeds the configured memory limit")
+                }
+                c @ Err(ScryptencError::OperationLimitExceeded) => {
+                    c.context("the encrypted data exceeds the configured CPU time limit")
                 }
                 c => c.context("the header in the encrypted data is invalid"),
             }?;

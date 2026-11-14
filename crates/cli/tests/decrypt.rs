@@ -333,3 +333,106 @@ fn decrypt_verbose() {
             "Parameters used: N = 1024; r = 8; p = 1;",
         ));
 }
+
+#[test]
+fn decrypt_with_max_length() {
+    command::command()
+        .arg("dec")
+        .arg("-L")
+        .arg("142")
+        .arg("--passphrase-from-stdin")
+        .arg("data/data.txt.scrypt")
+        .write_stdin("passphrase")
+        .assert()
+        .success()
+        .stdout(predicate::eq("Hello, world!\n"));
+}
+
+#[test]
+fn decrypt_if_ciphertext_exceeds_max_length() {
+    command::command()
+        .arg("dec")
+        .arg("-L")
+        .arg("141")
+        .arg("--passphrase-from-stdin")
+        .arg("data/data.txt.scrypt")
+        .write_stdin("passphrase")
+        .assert()
+        .failure()
+        .code(16)
+        .stderr(predicate::str::contains(
+            "the encrypted data is larger than the limit",
+        ));
+}
+
+#[test]
+fn invalid_length_for_decrypt_command() {
+    command::command()
+        .arg("dec")
+        .arg("-L")
+        .arg("127")
+        .arg("--passphrase-from-stdin")
+        .arg("data/data.txt.scrypt")
+        .write_stdin("passphrase")
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "length of the encrypted data is less than 128 bytes",
+        ));
+}
+
+#[test]
+fn decrypt_if_cpu_time_limit_is_exceeded() {
+    command::command()
+        .arg("dec")
+        .arg("-t")
+        .arg("1ns")
+        .arg("--passphrase-from-stdin")
+        .arg("data/data.txt.scrypt")
+        .write_stdin("passphrase")
+        .assert()
+        .failure()
+        .code(10)
+        .stderr(predicate::str::contains(
+            "decrypting the data takes too much CPU time",
+        ));
+}
+
+#[test]
+fn force_bypasses_the_resource_limits() {
+    command::command()
+        .arg("dec")
+        .arg("--force")
+        .arg("--passphrase-from-stdin")
+        .arg("data/data.txt.scrypt")
+        .write_stdin("passphrase")
+        .assert()
+        .success()
+        .stdout(predicate::eq("Hello, world!\n"));
+}
+
+#[test]
+fn decrypt_a_large_file_from_standard_input() {
+    let plaintext = vec![u8::default(); 2 * 1024 * 1024];
+    let ciphertext = scryptenc::Encryptor::with_params(
+        &plaintext,
+        "passphrase",
+        scryptenc::scrypt::Params::new(10, 8, 1, scryptenc::scrypt::Params::RECOMMENDED_LEN)
+            .unwrap(),
+    )
+    .encrypt_to_vec();
+
+    command::command()
+        .arg("dec")
+        .arg("-L")
+        .arg("16MiB")
+        .arg("--passphrase-from-env")
+        .arg("PASSPHRASE")
+        .arg("-")
+        .env("PASSPHRASE", "passphrase")
+        .write_stdin(ciphertext)
+        .assert()
+        .success()
+        .stdout(predicate::eq(plaintext));
+}
